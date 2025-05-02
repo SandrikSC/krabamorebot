@@ -46,8 +46,22 @@ def get_category_keyboard():
     kb.add(KeyboardButton("📝 Оформить заказ"), KeyboardButton("📞 Контакты"))
     return kb
 
+async def check_subscription(user_id):
+    try:
+        chat_member = await bot.get_chat_member(chat_id='@krabamoreblg', user_id=user_id)
+        return chat_member.status in ['member', 'creator', 'administrator']
+    except:
+        return False
+
 @dp.message_handler(commands=['start'])
 async def start_cmd(message: types.Message):
+    is_subscribed = await check_subscription(message.from_user.id)
+    if not is_subscribed:
+        await message.answer(
+            "❗ Чтобы пользоваться ботом, подпишитесь на наш канал: @krabamoreblg"
+        )
+        return
+
     if not category_data:
         await message.answer("Каталог пока не загружен. Попробуйте позже.")
     else:
