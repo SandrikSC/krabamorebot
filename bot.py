@@ -1,1 +1,0 @@
-# Bot code placeholder — должно быть тело с Webhook + /shop
