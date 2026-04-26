@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import os
 import pandas as pd
 from collections import defaultdict
@@ -9,7 +9,7 @@ from aiogram.utils.executor import start_webhook
 
 # ==================== НАСТРОЙКИ ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН")
-CHANNEL_ID = None  # Укажи @канал, если нужна проверка подписки
+CHANNEL_ID = None
 
 # === КОНТАКТЫ МАГАЗИНА ===
 SHOP_NAME = "Краба Море"
@@ -17,26 +17,24 @@ SHOP_ADDRESS = "ул. Калинина 1"
 SHOP_PHONE = "+7 (963) 814-36-34"
 WHATSAPP_NUMBER = "+79638143634"
 
-# === ЗАКАЗЫ: куда писать ===
+# === ЗАКАЗЫ ===
 MANAGER_TELEGRAM = "@krabamoreblg"
 MAX_LINK = "https://max.ru"
 
-# ==================== ЛОГИРОВАНИЕ (ДОЛЖНО БЫТЬ ДО load_catalog) ====================
+# ==================== ЛОГИРОВАНИЕ ====================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# ==================== ЗАГРУЗКА КАТАЛОГА ИЗ EXCEL ====================
+# ==================== ЗАГРУЗКА КАТАЛОГА ====================
 def load_catalog():
-    """Загружает каталог из catalog.xlsx"""
     try:
         if not os.path.exists("catalog.xlsx"):
             logger.error("Файл catalog.xlsx НЕ НАЙДЕН!")
             return {}
         df = pd.read_excel("catalog.xlsx")
-        # Убираем строку-дубль заголовка если есть
         df = df[df.iloc[:, 0] != df.columns[0]].reset_index(drop=True)
         
         emoji_map = {
@@ -107,13 +105,12 @@ ORDER_TEXT = (
     "📞 <b>Телефон</b> — проконсультируем"
 )
 
-# ==================== WEBHOOK НАСТРОЙКИ (Render) ====================
+# ==================== WEBHOOK ====================
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 8000))
 WEBHOOK_PATH = "/webhook/bot"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
 
-# ==================== ИНИЦИАЛИЗАЦИЯ ====================
 bot = Bot(token=TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
@@ -136,10 +133,13 @@ order_menu.add("🔙 Назад в меню")
 back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 back_menu.add("🔙 Назад в меню")
 
-# ==================== ПРОВЕРКА ПОДПИСКИ ====================
+# ==================== ДЕКОРАТОР ====================
 def subscription_required(channel=CHANNEL_ID):
     def decorator(handler):
         async def wrapper(*args, **kwargs):
+            # Удаляем state из kwargs если есть
+            kwargs.pop('state', None)
+
             msg = None
             for arg in args:
                 if isinstance(arg, types.Message):
