@@ -21,10 +21,20 @@ WHATSAPP_NUMBER = "+79638143634"
 MANAGER_TELEGRAM = "@krabamoreblg"
 MAX_LINK = "https://max.ru"
 
+# ==================== ЛОГИРОВАНИЕ (ДОЛЖНО БЫТЬ ДО load_catalog) ====================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 # ==================== ЗАГРУЗКА КАТАЛОГА ИЗ EXCEL ====================
 def load_catalog():
     """Загружает каталог из catalog.xlsx"""
     try:
+        if not os.path.exists("catalog.xlsx"):
+            logger.error("Файл catalog.xlsx НЕ НАЙДЕН!")
+            return {}
         df = pd.read_excel("catalog.xlsx")
         # Убираем строку-дубль заголовка если есть
         df = df[df.iloc[:, 0] != df.columns[0]].reset_index(drop=True)
@@ -104,12 +114,6 @@ WEBHOOK_PATH = "/webhook/bot"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
 
 # ==================== ИНИЦИАЛИЗАЦИЯ ====================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
 bot = Bot(token=TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
@@ -165,6 +169,9 @@ async def start_cmd(msg: types.Message):
     await msg.answer(START_TEXT, reply_markup=main_menu)
 
 async def catalog_cmd(msg: types.Message):
+    if not category_data:
+        await msg.answer("⚠️ Каталог временно недоступен. Попробуйте позже.")
+        return
     await msg.answer("📋 <b>Выберите категорию:</b>", reply_markup=catalog_menu)
 
 async def contacts_cmd(msg: types.Message):
