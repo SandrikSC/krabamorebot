@@ -133,13 +133,13 @@ order_menu.add("🔙 Назад в меню")
 back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 back_menu.add("🔙 Назад в меню")
 
-# ==================== ДЕКОРАТОР ====================
+# ==================== ДЕКОРАТОР (ИСПРАВЛЕННЫЙ) ====================
 def subscription_required(channel=CHANNEL_ID):
     def decorator(handler):
         async def wrapper(*args, **kwargs):
-            # Удаляем state из kwargs если есть
+            # Удаляем state из kwargs
             kwargs.pop('state', None)
-
+            
             msg = None
             for arg in args:
                 if isinstance(arg, types.Message):
