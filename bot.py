@@ -133,12 +133,14 @@ order_menu.add("🔙 Назад в меню")
 back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 back_menu.add("🔙 Назад в меню")
 
-# ==================== ДЕКОРАТОР (ИСПРАВЛЕННЫЙ) ====================
+# ==================== ДЕКОРАТОР (ФИНАЛЬНЫЙ) ====================
 def subscription_required(channel=CHANNEL_ID):
     def decorator(handler):
         async def wrapper(*args, **kwargs):
-            # Удаляем state из kwargs
-            kwargs.pop('state', None)
+            # Удаляем ВСЕ служебные аргументы aiogram
+            for key in list(kwargs.keys()):
+                if key in ('state', 'raw_state', 'check_result', 'index', 'handler_obj', 'dispatcher'):
+                    kwargs.pop(key, None)
             
             msg = None
             for arg in args:
