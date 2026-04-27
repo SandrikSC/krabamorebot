@@ -9,7 +9,6 @@ from aiogram.utils.executor import start_webhook, start_polling
 
 # ==================== НАСТРОЙКИ ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН")
-CHANNEL_ID = "@krabamoreblg"  # Канал для проверки подписки
 
 # === КОНТАКТЫ МАГАЗИНА ===
 SHOP_NAME = "Краба Море"
@@ -36,14 +35,14 @@ def load_catalog():
             return {}
         df = pd.read_excel("catalog.xlsx")
         df = df[df.iloc[:, 0] != df.columns[0]].reset_index(drop=True)
-        
+
         emoji_map = {
             "Крабы": "🦀", "Креветки/Раки": "🦐", "Рулетики": "🍥", "Рыба": "🐟",
             "Гребешки/Мидии": "🐚", "Молюск": "🦑", "Супы/Вок": "🍜",
             "Кальмар/Осьминог": "🦑", "Котлеты": "🥩", "Шашлычки": "🍢",
             "Пресервы": "🥫", "Пельмени": "🥟", "Икра": "🥚"
         }
-        
+
         categories = defaultdict(list)
         for _, row in df.iterrows():
             name = str(row.iloc[0]).strip()
@@ -52,7 +51,7 @@ def load_catalog():
             unit = str(row.iloc[3]).strip()
             if name and cat and price and name != "nan":
                 categories[cat].append({"name": name, "price": price, "unit": unit})
-        
+
         category_data = {}
         for cat, items in categories.items():
             emoji = emoji_map.get(cat, "📦")
@@ -60,7 +59,7 @@ def load_catalog():
             for i, item in enumerate(items, 1):
                 lines.append(str(i) + ". " + item["name"] + " — <b>" + item["price"] + "₽</b>/" + item["unit"])
             category_data[emoji + " " + cat] = "\n".join(lines)
-        
+
         logger.info("Каталог загружен: " + str(len(category_data)) + " категорий, " + str(len(df)) + " товаров")
         return category_data
     except Exception as e:
@@ -135,33 +134,6 @@ order_menu.add("🔙 Назад в меню")
 back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 back_menu.add("🔙 Назад в меню")
 
-# ==================== ПРОВЕРКА ПОДПИСКИ (ВАРИАНТ А) ====================
-def subscription_required(channel=CHANNEL_ID):
-    def decorator(handler):
-        async def wrapper(msg: types.Message, **kwargs):
-            try:
-                if not channel:
-                    return await handler(msg, **kwargs)
-                member = await bot.get_chat_member(channel, msg.from_user.id)
-                if member.status in ["member", "administrator", "creator"]:
-                    return await handler(msg, **kwargs)
-                else:
-                    # Не подписан — показываем кнопку подписки
-                    keyboard = types.InlineKeyboardMarkup()
-                    keyboard.add(types.InlineKeyboardButton("📢 Подписаться на канал", url="https://t.me/krabamoreblg"))
-                    await msg.answer(
-                        "❗ <b>Для использования бота нужно подписаться на наш канал:</b>\n\n"
-                        "👉 @krabamoreblg\n\n"
-                        "После подписки нажмите /start",
-                        reply_markup=keyboard
-                    )
-            except Exception as e:
-                # Если не можем проверить (бот не админ, канал закрыт и т.д.) — пропускаем
-                logger.warning("Проверка подписки не удалась: " + str(e))
-                return await handler(msg, **kwargs)
-        return wrapper
-    return decorator
-
 # ==================== КОМАНДЫ ====================
 async def start_cmd(msg: types.Message):
     await msg.answer(START_TEXT, reply_markup=main_menu)
@@ -226,78 +198,64 @@ async def sales_cmd(msg: types.Message):
 async def back_to_menu(msg: types.Message):
     await msg.answer("⬅️ Главное меню", reply_markup=main_menu)
 
-# ==================== ХЕНДЛЕРЫ С ПРОВЕРКОЙ ПОДПИСКИ ====================
+# ==================== ХЕНДЛЕРЫ (БЕЗ ПРОВЕРКИ ПОДПИСКИ) ====================
 @dp.message_handler(commands=["start"])
 async def start_handler(msg: types.Message):
     await start_cmd(msg)
 
 @dp.message_handler(commands=["catalog"])
-@subscription_required()
 async def catalog_handler(msg: types.Message):
     await catalog_cmd(msg)
 
 @dp.message_handler(commands=["contacts"])
-@subscription_required()
 async def contacts_handler(msg: types.Message):
     await contacts_cmd(msg)
 
 @dp.message_handler(commands=["order"])
-@subscription_required()
 async def order_handler(msg: types.Message):
     await order_cmd(msg)
 
 @dp.message_handler(commands=["sales"])
-@subscription_required()
 async def sales_handler(msg: types.Message):
     await sales_cmd(msg)
 
 @dp.message_handler(Text(equals="📋 Каталог", ignore_case=True))
-@subscription_required()
 async def catalog_btn(msg: types.Message):
     await catalog_cmd(msg)
 
 @dp.message_handler(Text(equals="📞 Контакты", ignore_case=True))
-@subscription_required()
 async def contacts_btn(msg: types.Message):
     await contacts_cmd(msg)
 
 @dp.message_handler(Text(equals="🛒 Оформить заказ", ignore_case=True))
-@subscription_required()
 async def order_btn(msg: types.Message):
     await order_cmd(msg)
 
 @dp.message_handler(Text(equals="💬 Написать в Telegram", ignore_case=True))
-@subscription_required()
 async def order_tg_btn(msg: types.Message):
     await order_telegram(msg)
 
 @dp.message_handler(Text(equals="📱 Написать в WhatsApp", ignore_case=True))
-@subscription_required()
 async def order_wa_btn(msg: types.Message):
     await order_whatsapp(msg)
 
 @dp.message_handler(Text(equals="🌐 Заказать через Max", ignore_case=True))
-@subscription_required()
 async def order_max_btn(msg: types.Message):
     await order_max(msg)
 
 @dp.message_handler(Text(equals="📞 Позвонить", ignore_case=True))
-@subscription_required()
 async def order_phone_btn(msg: types.Message):
     await order_phone(msg)
 
 @dp.message_handler(Text(equals="🎁 Акции", ignore_case=True))
-@subscription_required()
 async def sales_btn(msg: types.Message):
     await sales_cmd(msg)
 
 @dp.message_handler(Text(equals="🔙 Назад в меню", ignore_case=True))
-@subscription_required()
 async def back_handler(msg: types.Message):
     await back_to_menu(msg)
 
 @dp.message_handler(lambda msg: msg.text in category_data)
-@subscription_required()
 async def category_handler(msg: types.Message):
     logger.info("Пользователь " + str(msg.from_user.id) + " выбрал: " + str(msg.text))
     await msg.answer(category_data[msg.text], reply_markup=back_menu)
@@ -349,7 +307,7 @@ if __name__ == "__main__":
     if not TOKEN or TOKEN == "ВСТАВЬ_СЮДА_ТОКЕН":
         logger.error("❌ TELEGRAM_TOKEN не задан!")
         exit(1)
-    
+
     if WEBHOOK_URL and "render" in WEBHOOK_URL:
         start_webhook(
             dispatcher=dp,
