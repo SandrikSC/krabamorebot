@@ -198,7 +198,8 @@ async def sales_cmd(msg: types.Message):
 async def back_to_menu(msg: types.Message):
     await msg.answer("⬅️ Главное меню", reply_markup=main_menu)
 
-# ==================== ХЕНДЛЕРЫ (БЕЗ ПРОВЕРКИ ПОДПИСКИ) ====================
+# ==================== ХЕНДЛЕРЫ (ПРАВИЛЬНЫЙ ПОРЯДОК) ====================
+# 1. Команды
 @dp.message_handler(commands=["start"])
 async def start_handler(msg: types.Message):
     await start_cmd(msg)
@@ -218,6 +219,12 @@ async def order_handler(msg: types.Message):
 @dp.message_handler(commands=["sales"])
 async def sales_handler(msg: types.Message):
     await sales_cmd(msg)
+
+# 2. Кнопки меню (ВАЖНО: back_handler ДО catch_all)
+@dp.message_handler(Text(equals="🔙 Назад в меню", ignore_case=True))
+async def back_handler(msg: types.Message):
+    logger.info("BACK BUTTON: user=" + str(msg.from_user.id) + " text=" + str(msg.text))
+    await back_to_menu(msg)
 
 @dp.message_handler(Text(equals="📋 Каталог", ignore_case=True))
 async def catalog_btn(msg: types.Message):
@@ -251,15 +258,13 @@ async def order_phone_btn(msg: types.Message):
 async def sales_btn(msg: types.Message):
     await sales_cmd(msg)
 
-@dp.message_handler(Text(equals="🔙 Назад в меню", ignore_case=True))
-async def back_handler(msg: types.Message):
-    await back_to_menu(msg)
-
+# 3. Категории товаров
 @dp.message_handler(lambda msg: msg.text in category_data)
 async def category_handler(msg: types.Message):
     logger.info("Пользователь " + str(msg.from_user.id) + " выбрал: " + str(msg.text))
     await msg.answer(category_data[msg.text], reply_markup=back_menu)
 
+# 4. Ловушка ВСЕГДА ПОСЛЕДНЯЯ
 @dp.message_handler()
 async def catch_all(msg: types.Message):
     logger.warning("Необработанное от " + str(msg.from_user.id) + ": " + str(msg.text))
