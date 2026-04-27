@@ -4,7 +4,6 @@ import pandas as pd
 from collections import defaultdict
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher.filters import Text
 from aiogram.utils.executor import start_webhook, start_polling
 
 # ==================== НАСТРОЙКИ ====================
@@ -69,6 +68,14 @@ def load_catalog():
 category_data = load_catalog()
 
 # ==================== ТЕКСТЫ ====================
+WELCOME_TEXT = (
+    "👋 <b>Добро пожаловать в магазин Краба Море!</b>\n\n"
+    "🦀 Свежие морепродукты и деликатесы\n"
+    "🚚 Доставка по городу\n"
+    "💰 За лучшим — к нам. Остальное и так найдётся\n\n"
+    "<b>Для начала работы нажмите кнопку ниже 👇</b>"
+)
+
 CONTACTS_TEXT = (
     "📞 <b>Контакты магазина Краба Море</b>\n\n"
     "☎️ Телефон: +7 (963) 814-36-34\n"
@@ -93,7 +100,7 @@ START_TEXT = (
     "👋 Добро пожаловать в <b>Краба Море</b>!\n\n"
     "🦀 Свежие морепродукты и деликатесы\n"
     "🚚 Доставка по городу\n"
-    "💰 Цены от производителя\n\n"
+    "💰 За лучшим — к нам. Остальное и так найдётся\n\n"
     "Выберите действие в меню ниже 👇"
 )
 
@@ -117,6 +124,10 @@ storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
 
 # ==================== КЛАВИАТУРЫ ====================
+# Клавиатура для новых пользователей (до /start)
+welcome_keyboard = types.InlineKeyboardMarkup()
+welcome_keyboard.add(types.InlineKeyboardButton("🚀 Запустить бота", callback_data="start_bot"))
+
 main_menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
 main_menu.add("📋 Каталог", "📞 Контакты")
 main_menu.add("🛒 Оформить заказ", "🎁 Акции")
@@ -135,6 +146,10 @@ back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 back_menu.add("🔙 Назад в меню")
 
 # ==================== КОМАНДЫ ====================
+async def welcome_cmd(msg: types.Message):
+    """Приветствие для новых пользователей"""
+    await msg.answer(WELCOME_TEXT, reply_markup=welcome_keyboard)
+
 async def start_cmd(msg: types.Message):
     await msg.answer(START_TEXT, reply_markup=main_menu)
 
@@ -198,80 +213,94 @@ async def sales_cmd(msg: types.Message):
 async def back_to_menu(msg: types.Message):
     await msg.answer("⬅️ Главное меню", reply_markup=main_menu)
 
-# ==================== ХЕНДЛЕРЫ (ПРАВИЛЬНЫЙ ПОРЯДОК) ====================
-# 1. Команды
+# ==================== ХЕНДЛЕРЫ ====================
+# 1. Команда /start
 @dp.message_handler(commands=["start"])
 async def start_handler(msg: types.Message):
     await start_cmd(msg)
 
-@dp.message_handler(commands=["catalog"])
-async def catalog_handler(msg: types.Message):
-    await catalog_cmd(msg)
+# 2. Команды
+@dp.message_handler(commands=["catalog", "contacts", "order", "sales"])
+async def commands_handler(msg: types.Message):
+    if msg.text == "/catalog":
+        await catalog_cmd(msg)
+    elif msg.text == "/contacts":
+        await contacts_cmd(msg)
+    elif msg.text == "/order":
+        await order_cmd(msg)
+    elif msg.text == "/sales":
+        await sales_cmd(msg)
 
-@dp.message_handler(commands=["contacts"])
-async def contacts_handler(msg: types.Message):
-    await contacts_cmd(msg)
+# 3. Callback от inline-кнопки "Запустить бота"
+@dp.callback_query_handler(lambda c: c.data == "start_bot")
+async def process_callback_start(callback_query: types.CallbackQuery):
+    await bot.answer_callback_query(callback_query.id)
+    await start_cmd(callback_query.message)
 
-@dp.message_handler(commands=["order"])
-async def order_handler(msg: types.Message):
-    await order_cmd(msg)
-
-@dp.message_handler(commands=["sales"])
-async def sales_handler(msg: types.Message):
-    await sales_cmd(msg)
-
-# 2. Кнопки меню (ВАЖНО: back_handler ДО catch_all)
-@dp.message_handler(Text(equals="🔙 Назад в меню", ignore_case=True))
-async def back_handler(msg: types.Message):
-    logger.info("BACK BUTTON: user=" + str(msg.from_user.id) + " text=" + str(msg.text))
-    await back_to_menu(msg)
-
-@dp.message_handler(Text(equals="📋 Каталог", ignore_case=True))
-async def catalog_btn(msg: types.Message):
-    await catalog_cmd(msg)
-
-@dp.message_handler(Text(equals="📞 Контакты", ignore_case=True))
-async def contacts_btn(msg: types.Message):
-    await contacts_cmd(msg)
-
-@dp.message_handler(Text(equals="🛒 Оформить заказ", ignore_case=True))
-async def order_btn(msg: types.Message):
-    await order_cmd(msg)
-
-@dp.message_handler(Text(equals="💬 Написать в Telegram", ignore_case=True))
-async def order_tg_btn(msg: types.Message):
-    await order_telegram(msg)
-
-@dp.message_handler(Text(equals="📱 Написать в WhatsApp", ignore_case=True))
-async def order_wa_btn(msg: types.Message):
-    await order_whatsapp(msg)
-
-@dp.message_handler(Text(equals="🌐 Заказать через Max", ignore_case=True))
-async def order_max_btn(msg: types.Message):
-    await order_max(msg)
-
-@dp.message_handler(Text(equals="📞 Позвонить", ignore_case=True))
-async def order_phone_btn(msg: types.Message):
-    await order_phone(msg)
-
-@dp.message_handler(Text(equals="🎁 Акции", ignore_case=True))
-async def sales_btn(msg: types.Message):
-    await sales_cmd(msg)
-
-# 3. Категории товаров
-@dp.message_handler(lambda msg: msg.text in category_data)
-async def category_handler(msg: types.Message):
-    logger.info("Пользователь " + str(msg.from_user.id) + " выбрал: " + str(msg.text))
-    await msg.answer(category_data[msg.text], reply_markup=back_menu)
-
-# 4. Ловушка ВСЕГДА ПОСЛЕДНЯЯ
+# 4. УНИВЕРСАЛЬНЫЙ ХЕНДЛЕР ДЛЯ ВСЕХ КНОПОК
 @dp.message_handler()
-async def catch_all(msg: types.Message):
-    logger.warning("Необработанное от " + str(msg.from_user.id) + ": " + str(msg.text))
-    await msg.answer(
-        "❓ Я не понял команду. Используйте меню ниже или нажмите /start",
-        reply_markup=main_menu
-    )
+async def all_buttons_handler(msg: types.Message):
+    text = msg.text.lower()
+    original_text = msg.text
+
+    logger.info("Получено сообщение: '" + original_text + "' от user=" + str(msg.from_user.id))
+
+    # Назад в меню
+    if "назад" in text or "меню" in text:
+        logger.info("ОБНАРУЖЕНО 'назад' или 'меню'")
+        await back_to_menu(msg)
+        return
+
+    # Каталог
+    elif "каталог" in text:
+        await catalog_cmd(msg)
+        return
+
+    # Контакты
+    elif "контакт" in text:
+        await contacts_cmd(msg)
+        return
+
+    # Оформить заказ
+    elif "заказ" in text or "оформить" in text:
+        await order_cmd(msg)
+        return
+
+    # Акции
+    elif "акци" in text:
+        await sales_cmd(msg)
+        return
+
+    # Telegram
+    elif "telegram" in text or "телеграм" in text:
+        await order_telegram(msg)
+        return
+
+    # WhatsApp
+    elif "whatsapp" in text or "ватсап" in text:
+        await order_whatsapp(msg)
+        return
+
+    # Max
+    elif "max" in text:
+        await order_max(msg)
+        return
+
+    # Позвонить
+    elif "позвонить" in text or "телефон" in text:
+        await order_phone(msg)
+        return
+
+    # Категории товаров
+    elif original_text in category_data:
+        logger.info("Пользователь выбрал категорию: " + original_text)
+        await msg.answer(category_data[original_text], reply_markup=back_menu)
+        return
+
+    # Неизвестная команда — показываем приветствие
+    else:
+        logger.warning("Необработанное: '" + original_text + "'")
+        await welcome_cmd(msg)
 
 @dp.errors_handler()
 async def error_handler(update, exception):
@@ -285,11 +314,11 @@ async def on_startup(dp):
     logger.info("Категорий: " + str(len(category_data)))
     try:
         await bot.set_my_commands([
-            types.BotCommand("start", "Главное меню"),
-            types.BotCommand("catalog", "Каталог"),
-            types.BotCommand("contacts", "Контакты"),
-            types.BotCommand("order", "Оформить заказ"),
-            types.BotCommand("sales", "Акции"),
+            types.BotCommand("start", "🚀 Запустить бота"),
+            types.BotCommand("catalog", "📋 Каталог"),
+            types.BotCommand("contacts", "📞 Контакты"),
+            types.BotCommand("order", "🛒 Оформить заказ"),
+            types.BotCommand("sales", "🎁 Акции"),
         ])
         logger.info("Команды установлены")
     except Exception as e:
