@@ -36,14 +36,14 @@ def load_catalog():
             return {}
         df = pd.read_excel("catalog.xlsx")
         df = df[df.iloc[:, 0] != df.columns[0]].reset_index(drop=True)
-
+        
         emoji_map = {
             "Крабы": "🦀", "Креветки/Раки": "🦐", "Рулетики": "🍥", "Рыба": "🐟",
             "Гребешки/Мидии": "🐚", "Молюск": "🦑", "Супы/Вок": "🍜",
             "Кальмар/Осьминог": "🦑", "Котлеты": "🥩", "Шашлычки": "🍢",
             "Пресервы": "🥫", "Пельмени": "🥟", "Икра": "🥚"
         }
-
+        
         categories = defaultdict(list)
         for _, row in df.iterrows():
             name = str(row.iloc[0]).strip()
@@ -52,7 +52,7 @@ def load_catalog():
             unit = str(row.iloc[3]).strip()
             if name and cat and price and name != "nan":
                 categories[cat].append({"name": name, "price": price, "unit": unit})
-
+        
         category_data = {}
         for cat, items in categories.items():
             emoji = emoji_map.get(cat, "📦")
@@ -60,7 +60,7 @@ def load_catalog():
             for i, item in enumerate(items, 1):
                 lines.append(str(i) + ". " + item["name"] + " — <b>" + item["price"] + "₽</b>/" + item["unit"])
             category_data[emoji + " " + cat] = "\n".join(lines)
-
+        
         logger.info("Каталог загружен: " + str(len(category_data)) + " категорий, " + str(len(df)) + " товаров")
         return category_data
     except Exception as e:
@@ -135,17 +135,18 @@ order_menu.add("🔙 Назад в меню")
 back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 back_menu.add("🔙 Назад в меню")
 
-# ==================== ПРОВЕРКА ПОДПИСКИ ====================
+# ==================== ПРОВЕРКА ПОДПИСКИ (ВАРИАНТ А) ====================
 def subscription_required(channel=CHANNEL_ID):
     def decorator(handler):
         async def wrapper(msg: types.Message, **kwargs):
-            if not channel:
-                return await handler(msg, **kwargs)
             try:
+                if not channel:
+                    return await handler(msg, **kwargs)
                 member = await bot.get_chat_member(channel, msg.from_user.id)
                 if member.status in ["member", "administrator", "creator"]:
                     return await handler(msg, **kwargs)
                 else:
+                    # Не подписан — показываем кнопку подписки
                     keyboard = types.InlineKeyboardMarkup()
                     keyboard.add(types.InlineKeyboardButton("📢 Подписаться на канал", url="https://t.me/krabamoreblg"))
                     await msg.answer(
@@ -155,7 +156,8 @@ def subscription_required(channel=CHANNEL_ID):
                         reply_markup=keyboard
                     )
             except Exception as e:
-                logger.error("Ошибка проверки подписки: " + str(e))
+                # Если не можем проверить (бот не админ, канал закрыт и т.д.) — пропускаем
+                logger.warning("Проверка подписки не удалась: " + str(e))
                 return await handler(msg, **kwargs)
         return wrapper
     return decorator
@@ -224,7 +226,7 @@ async def sales_cmd(msg: types.Message):
 async def back_to_menu(msg: types.Message):
     await msg.answer("⬅️ Главное меню", reply_markup=main_menu)
 
-# ==================== ХЕНДЛЕРЫ ====================
+# ==================== ХЕНДЛЕРЫ С ПРОВЕРКОЙ ПОДПИСКИ ====================
 @dp.message_handler(commands=["start"])
 async def start_handler(msg: types.Message):
     await start_cmd(msg)
@@ -347,7 +349,7 @@ if __name__ == "__main__":
     if not TOKEN or TOKEN == "ВСТАВЬ_СЮДА_ТОКЕН":
         logger.error("❌ TELEGRAM_TOKEN не задан!")
         exit(1)
-
+    
     if WEBHOOK_URL and "render" in WEBHOOK_URL:
         start_webhook(
             dispatcher=dp,
