@@ -5,7 +5,7 @@ from collections import defaultdict
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters import Text
-from aiogram.utils.executor import start_webhook
+from aiogram.utils.executor import start_webhook, start_polling
 
 # ==================== НАСТРОЙКИ ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН")
@@ -105,7 +105,7 @@ ORDER_TEXT = (
     "📞 <b>Телефон</b> — проконсультируем"
 )
 
-# ==================== WEBHOOK ====================
+# ==================== WEBHOOK НАСТРОЙКИ (для Render) ====================
 WEBAPP_HOST = "0.0.0.0"
 WEBAPP_PORT = int(os.getenv("PORT", 8000))
 WEBHOOK_PATH = "/webhook/bot"
@@ -197,7 +197,7 @@ async def sales_cmd(msg: types.Message):
 async def back_to_menu(msg: types.Message):
     await msg.answer("⬅️ Главное меню", reply_markup=main_menu)
 
-# ==================== ХЕНДЛЕРЫ (БЕЗ ДЕКОРАТОРА ПОДПИСКИ) ====================
+# ==================== ХЕНДЛЕРЫ ====================
 @dp.message_handler(commands=["start"])
 async def start_handler(msg: types.Message):
     await start_cmd(msg)
@@ -301,10 +301,13 @@ async def on_shutdown(dp):
     await bot.session.close()
     logger.info("Бот остановлен")
 
+# ==================== ЗАПУСК ====================
 if __name__ == "__main__":
     if not TOKEN or TOKEN == "ВСТАВЬ_СЮДА_ТОКЕН":
         logger.error("❌ TELEGRAM_TOKEN не задан!")
         exit(1)
+    
+    # === ВАРИАНТ 1: WEBHOOK (для Render) — медленно на бесплатном тарифе ===
     if WEBHOOK_URL and "render" in WEBHOOK_URL:
         start_webhook(
             dispatcher=dp,
@@ -316,6 +319,6 @@ if __name__ == "__main__":
             port=WEBAPP_PORT,
         )
     else:
+        # === ВАРИАНТ 2: POLLING (для локального теста) — быстро, но компьютер должен быть включен ===
         logger.info("Запуск polling...")
-        from aiogram.utils.executor import start_polling
         start_polling(dp, skip_updates=True, on_startup=on_startup, on_shutdown=on_shutdown)
