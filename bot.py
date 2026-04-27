@@ -133,39 +133,6 @@ order_menu.add("🔙 Назад в меню")
 back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
 back_menu.add("🔙 Назад в меню")
 
-# ==================== ДЕКОРАТОР (ФИНАЛЬНЫЙ) ====================
-def subscription_required(channel=CHANNEL_ID):
-    def decorator(handler):
-        async def wrapper(*args, **kwargs):
-            # Удаляем ВСЕ служебные аргументы aiogram
-            for key in list(kwargs.keys()):
-                if key in ('state', 'raw_state', 'check_result', 'index', 'handler_obj', 'dispatcher'):
-                    kwargs.pop(key, None)
-            
-            msg = None
-            for arg in args:
-                if isinstance(arg, types.Message):
-                    msg = arg
-                    break
-            if not msg:
-                return await handler(*args, **kwargs)
-            if not channel:
-                return await handler(*args, **kwargs)
-            try:
-                member = await bot.get_chat_member(channel, msg.from_user.id)
-                if member.status in ["member", "administrator", "creator"]:
-                    return await handler(*args, **kwargs)
-                else:
-                    await msg.answer(
-                        "❗ Для использования бота подпишись на канал: " + str(channel),
-                        reply_markup=types.ReplyKeyboardRemove()
-                    )
-            except Exception as e:
-                logger.error("Ошибка проверки подписки: " + str(e))
-                return await handler(*args, **kwargs)
-        return wrapper
-    return decorator
-
 # ==================== КОМАНДЫ ====================
 async def start_cmd(msg: types.Message):
     await msg.answer(START_TEXT, reply_markup=main_menu)
@@ -230,78 +197,64 @@ async def sales_cmd(msg: types.Message):
 async def back_to_menu(msg: types.Message):
     await msg.answer("⬅️ Главное меню", reply_markup=main_menu)
 
-# ==================== ХЕНДЛЕРЫ ====================
+# ==================== ХЕНДЛЕРЫ (БЕЗ ДЕКОРАТОРА ПОДПИСКИ) ====================
 @dp.message_handler(commands=["start"])
 async def start_handler(msg: types.Message):
     await start_cmd(msg)
 
 @dp.message_handler(commands=["catalog"])
-@subscription_required()
 async def catalog_handler(msg: types.Message):
     await catalog_cmd(msg)
 
 @dp.message_handler(commands=["contacts"])
-@subscription_required()
 async def contacts_handler(msg: types.Message):
     await contacts_cmd(msg)
 
 @dp.message_handler(commands=["order"])
-@subscription_required()
 async def order_handler(msg: types.Message):
     await order_cmd(msg)
 
 @dp.message_handler(commands=["sales"])
-@subscription_required()
 async def sales_handler(msg: types.Message):
     await sales_cmd(msg)
 
 @dp.message_handler(Text(equals="📋 Каталог", ignore_case=True))
-@subscription_required()
 async def catalog_btn(msg: types.Message):
     await catalog_cmd(msg)
 
 @dp.message_handler(Text(equals="📞 Контакты", ignore_case=True))
-@subscription_required()
 async def contacts_btn(msg: types.Message):
     await contacts_cmd(msg)
 
 @dp.message_handler(Text(equals="🛒 Оформить заказ", ignore_case=True))
-@subscription_required()
 async def order_btn(msg: types.Message):
     await order_cmd(msg)
 
 @dp.message_handler(Text(equals="💬 Написать в Telegram", ignore_case=True))
-@subscription_required()
 async def order_tg_btn(msg: types.Message):
     await order_telegram(msg)
 
 @dp.message_handler(Text(equals="📱 Написать в WhatsApp", ignore_case=True))
-@subscription_required()
 async def order_wa_btn(msg: types.Message):
     await order_whatsapp(msg)
 
 @dp.message_handler(Text(equals="🌐 Заказать через Max", ignore_case=True))
-@subscription_required()
 async def order_max_btn(msg: types.Message):
     await order_max(msg)
 
 @dp.message_handler(Text(equals="📞 Позвонить", ignore_case=True))
-@subscription_required()
 async def order_phone_btn(msg: types.Message):
     await order_phone(msg)
 
 @dp.message_handler(Text(equals="🎁 Акции", ignore_case=True))
-@subscription_required()
 async def sales_btn(msg: types.Message):
     await sales_cmd(msg)
 
 @dp.message_handler(Text(equals="🔙 Назад в меню", ignore_case=True))
-@subscription_required()
 async def back_handler(msg: types.Message):
     await back_to_menu(msg)
 
 @dp.message_handler(lambda msg: msg.text in category_data)
-@subscription_required()
 async def category_handler(msg: types.Message):
     logger.info("Пользователь " + str(msg.from_user.id) + " выбрал: " + str(msg.text))
     await msg.answer(category_data[msg.text], reply_markup=back_menu)
