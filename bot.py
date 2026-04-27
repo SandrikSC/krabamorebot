@@ -35,14 +35,14 @@ def load_catalog():
             return {}
         df = pd.read_excel("catalog.xlsx")
         df = df[df.iloc[:, 0] != df.columns[0]].reset_index(drop=True)
-
+        
         emoji_map = {
             "Крабы": "🦀", "Креветки/Раки": "🦐", "Рулетики": "🍥", "Рыба": "🐟",
             "Гребешки/Мидии": "🐚", "Молюск": "🦑", "Супы/Вок": "🍜",
             "Кальмар/Осьминог": "🦑", "Котлеты": "🥩", "Шашлычки": "🍢",
             "Пресервы": "🥫", "Пельмени": "🥟", "Икра": "🥚"
         }
-
+        
         categories = defaultdict(list)
         for _, row in df.iterrows():
             name = str(row.iloc[0]).strip()
@@ -51,7 +51,7 @@ def load_catalog():
             unit = str(row.iloc[3]).strip()
             if name and cat and price and name != "nan":
                 categories[cat].append({"name": name, "price": price, "unit": unit})
-
+        
         category_data = {}
         for cat, items in categories.items():
             emoji = emoji_map.get(cat, "📦")
@@ -59,7 +59,7 @@ def load_catalog():
             for i, item in enumerate(items, 1):
                 lines.append(str(i) + ". " + item["name"] + " — <b>" + item["price"] + "₽</b>/" + item["unit"])
             category_data[emoji + " " + cat] = "\n".join(lines)
-
+        
         logger.info("Каталог загружен: " + str(len(category_data)) + " категорий, " + str(len(df)) + " товаров")
         return category_data
     except Exception as e:
@@ -220,8 +220,8 @@ async def order_handler(msg: types.Message):
 async def sales_handler(msg: types.Message):
     await sales_cmd(msg)
 
-# 2. Кнопки меню (ВАЖНО: back_handler ДО catch_all)
-@dp.message_handler(Text(equals="🔙 Назад в меню", ignore_case=True))
+# 2. Кнопки меню (back_handler ДО catch_all)
+@dp.message_handler(lambda msg: "назад" in msg.text.lower())
 async def back_handler(msg: types.Message):
     logger.info("BACK BUTTON: user=" + str(msg.from_user.id) + " text=" + str(msg.text))
     await back_to_menu(msg)
@@ -312,7 +312,7 @@ if __name__ == "__main__":
     if not TOKEN or TOKEN == "ВСТАВЬ_СЮДА_ТОКЕН":
         logger.error("❌ TELEGRAM_TOKEN не задан!")
         exit(1)
-
+    
     if WEBHOOK_URL and "render" in WEBHOOK_URL:
         start_webhook(
             dispatcher=dp,
