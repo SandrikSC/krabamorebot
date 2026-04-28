@@ -5,6 +5,7 @@ from collections import defaultdict
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.executor import start_webhook, start_polling
+import asyncio
 
 # ==================== НАСТРОЙКИ ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН")
@@ -29,10 +30,23 @@ logger = logging.getLogger(__name__)
 # ==================== ЗАГРУЗКА КАТАЛОГА ====================
 def load_catalog():
     try:
-        if not os.path.exists("catalog.xlsx"):
-            logger.error("Файл catalog.xlsx НЕ НАЙДЕН!")
+        # Проверяем несколько путей (для Render и локальной разработки)
+        possible_paths = ["catalog.xlsx", "/app/catalog.xlsx", "./catalog.xlsx", os.path.join(os.path.dirname(__file__), "catalog.xlsx")]
+        catalog_path = None
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                catalog_path = path
+                logger.info(f"Найден catalog.xlsx: {path}")
+                break
+        
+        if not catalog_path:
+            logger.error("Файл catalog.xlsx НЕ НАЙДЕН ни в одном из путей!")
+            logger.error(f"Текущая директория: {os.getcwd()}")
+            logger.error(f"Содержимое директории: {os.listdir('.')}")
             return {}
-        df = pd.read_excel("catalog.xlsx")
+            
+        df = pd.read_excel(catalog_path)
         df = df[df.iloc[:, 0] != df.columns[0]].reset_index(drop=True)
 
         emoji_map = {
@@ -62,7 +76,7 @@ def load_catalog():
         logger.info("Каталог загружен: " + str(len(category_data)) + " категорий, " + str(len(df)) + " товаров")
         return category_data
     except Exception as e:
-        logger.error("Ошибка загрузки каталога: " + str(e))
+        logger.error("Ошибка загрузки каталога: " + str(e), exc_info=True)
         return {}
 
 category_data = load_catalog()
@@ -82,8 +96,7 @@ CONTACTS_TEXT = (
     "📍 Адрес: ул. Калинина 1\n"
     "💬 WhatsApp: +79638143634\n"
     "📱 Telegram: <a href=\"https://t.me/krabamoreblg\">@krabamoreblg</a>\n\n"
-    "🕐 <b>Режим работы:</b>\n"
-    "10:00 — 21:00\n\n"
+    "🕐 <b>Режим работы:</b>\n    10:00 — 21:00\n\n"
     "⚠️ <i>С 20:00 до 21:00 предварительно звоните — можем находиться на доставке</i>"
 )
 
@@ -128,22 +141,31 @@ dp = Dispatcher(bot, storage=storage)
 welcome_keyboard = types.InlineKeyboardMarkup()
 welcome_keyboard.add(types.InlineKeyboardButton("🚀 Запустить бота", callback_data="start_bot"))
 
-main_menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-main_menu.add("📋 Каталог", "📞 Контакты")
-main_menu.add("🛒 Оформить заказ", "🎁 Акции")
+def get_main_menu():
+    """Создаём меню заново при каждом вызове — надёжнее"""
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    menu.add("📋 Каталог", "📞 Контакты")
+    menu.add("🛒 Оформить заказ", "🎁 Акции")
+    return menu
 
-catalog_menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-for category in category_data.keys():
-    catalog_menu.add(category)
-catalog_menu.add("🔙 Назад в меню")
+def get_catalog_menu():
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    for category in category_data.keys():
+        menu.add(category)
+    menu.add("🔙 Назад в меню")
+    return menu
 
-order_menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-order_menu.add("💬 Написать в Telegram", "📱 Написать в WhatsApp")
-order_menu.add("🌐 Заказать через Max", "📞 Позвонить")
-order_menu.add("🔙 Назад в меню")
+def get_order_menu():
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    menu.add("💬 Написать в Telegram", "📱 Написать в WhatsApp")
+    menu.add("🌐 Заказать через Max", "📞 Позвонить")
+    menu.add("🔙 Назад в меню")
+    return menu
 
-back_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-back_menu.add("🔙 Назад в меню")
+def get_back_menu():
+    menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    menu.add("🔙 Назад в меню")
+    return menu
 
 # ==================== КОМАНДЫ ====================
 async def welcome_cmd(msg: types.Message):
@@ -151,19 +173,19 @@ async def welcome_cmd(msg: types.Message):
     await msg.answer(WELCOME_TEXT, reply_markup=welcome_keyboard)
 
 async def start_cmd(msg: types.Message):
-    await msg.answer(START_TEXT, reply_markup=main_menu)
+    await msg.answer(START_TEXT, reply_markup=get_main_menu())
 
 async def catalog_cmd(msg: types.Message):
     if not category_data:
         await msg.answer("⚠️ Каталог временно недоступен. Попробуйте позже.")
         return
-    await msg.answer("📋 <b>Выберите категорию:</b>", reply_markup=catalog_menu)
+    await msg.answer("📋 <b>Выберите категорию:</b>", reply_markup=get_catalog_menu())
 
 async def contacts_cmd(msg: types.Message):
-    await msg.answer(CONTACTS_TEXT, reply_markup=back_menu)
+    await msg.answer(CONTACTS_TEXT, reply_markup=get_back_menu())
 
 async def order_cmd(msg: types.Message):
-    await msg.answer(ORDER_TEXT, reply_markup=order_menu)
+    await msg.answer(ORDER_TEXT, reply_markup=get_order_menu())
 
 async def order_telegram(msg: types.Message):
     keyboard = types.InlineKeyboardMarkup()
@@ -187,11 +209,22 @@ async def order_whatsapp(msg: types.Message):
     )
 
 async def order_max(msg: types.Message):
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton("🌐 Открыть Max", url=MAX_LINK))
+    # Пробуем несколько форматов ссылок для Max
+    max_links = [
+        "https://max.ru/u/f9LHodD0cOKyWMZFNxZNIEc752Qto0d0WidvEMDukqVCdvuhBUu3bo_7_n0",
+        "max://u/f9LHodD0cOKyWMZFNxZNIEc752Qto0d0WidvEMDukqVCdvuhBUu3bo_7_n0",
+        "https://max.ru/join?invite=f9LHodD0cOKyWMZFNxZNIEc752Qto0d0WidvEMDukqVCdvuhBUu3bo_7_n0"
+    ]
+    
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(types.InlineKeyboardButton("🌐 Открыть в браузере", url=max_links[0]))
+    keyboard.add(types.InlineKeyboardButton("🌐 Открыть в приложении Max", url=max_links[1]))
+    
     await msg.answer(
         "🌐 <b>Заказ через Max</b>\n\n"
-        "Перейдите по ссылке для оформления заказа онлайн.\n\n"
+        "Выберите способ открытия:\n"
+        "• <b>В браузере</b> — если приложение не установлено\n"
+        "• <b>В приложении</b> — если Max установлен\n\n"
         "Или свяжитесь с нами через Telegram/WhatsApp.",
         reply_markup=keyboard
     )
@@ -208,10 +241,10 @@ async def order_phone(msg: types.Message):
     )
 
 async def sales_cmd(msg: types.Message):
-    await msg.answer(SALES_TEXT, reply_markup=back_menu)
+    await msg.answer(SALES_TEXT, reply_markup=get_back_menu())
 
 async def back_to_menu(msg: types.Message):
-    await msg.answer("⬅️ Главное меню", reply_markup=main_menu)
+    await msg.answer("⬅️ Главное меню", reply_markup=get_main_menu())
 
 # ==================== ХЕНДЛЕРЫ ====================
 # 1. Команда /start
@@ -245,8 +278,8 @@ async def all_buttons_handler(msg: types.Message):
 
     logger.info("Получено сообщение: '" + original_text + "' от user=" + str(msg.from_user.id))
 
-    # Назад в меню
-    if "назад" in text or "меню" in text:
+    # Назад в меню — ПРИОРИТЕТНАЯ ПРОВЕРКА
+    if "назад" in text or "меню" in text or text == "🔙 назад в меню":
         logger.info("ОБНАРУЖЕНО 'назад' или 'меню'")
         await back_to_menu(msg)
         return
@@ -294,7 +327,7 @@ async def all_buttons_handler(msg: types.Message):
     # Категории товаров
     elif original_text in category_data:
         logger.info("Пользователь выбрал категорию: " + original_text)
-        await msg.answer(category_data[original_text], reply_markup=back_menu)
+        await msg.answer(category_data[original_text], reply_markup=get_back_menu())
         return
 
     # Неизвестная команда — показываем приветствие
@@ -306,12 +339,26 @@ async def all_buttons_handler(msg: types.Message):
 async def error_handler(update, exception):
     logger.error("Ошибка: " + str(exception), exc_info=True)
     if update and hasattr(update, 'message') and update.message:
-        await update.message.answer("⚠️ Произошла ошибка. Попробуйте позже.")
+        try:
+            await update.message.answer("⚠️ Произошла ошибка. Попробуйте позже.")
+        except:
+            pass
     return True
+
+# ==================== KEEP-ALIVE (чтобы Render не усыплял бота) ====================
+async def keep_alive():
+    """Отправляем себе пинг каждые 5 минут, чтобы бот не засыпал на Render"""
+    while True:
+        await asyncio.sleep(300)  # 5 минут
+        logger.info("Keep-alive ping")
 
 async def on_startup(dp):
     logger.info("Бот Краба Море запущен. Webhook: " + str(WEBHOOK_URL))
     logger.info("Категорий: " + str(len(category_data)))
+    
+    # Запускаем keep-alive
+    asyncio.create_task(keep_alive())
+    
     try:
         await bot.set_my_commands([
             types.BotCommand("start", "🚀 Запустить бота"),
@@ -323,15 +370,22 @@ async def on_startup(dp):
         logger.info("Команды установлены")
     except Exception as e:
         logger.error("Команды не установлены: " + str(e))
+    
     if WEBHOOK_URL and "render" in WEBHOOK_URL:
-        await bot.set_webhook(WEBHOOK_URL)
-        logger.info("Webhook установлен")
+        try:
+            await bot.set_webhook(WEBHOOK_URL)
+            logger.info("Webhook установлен: " + WEBHOOK_URL)
+        except Exception as e:
+            logger.error("Webhook не установлен: " + str(e))
     else:
-        logger.warning("WEBHOOK_URL не задан!")
+        logger.warning("WEBHOOK_URL не задан! Используется polling.")
 
 async def on_shutdown(dp):
     logger.info("Удаляю webhook...")
-    await bot.delete_webhook()
+    try:
+        await bot.delete_webhook()
+    except:
+        pass
     await storage.close()
     await bot.session.close()
     logger.info("Бот остановлен")
