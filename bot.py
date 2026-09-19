@@ -1,5 +1,5 @@
 diff --git a/bot.py b/bot.py
-index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..70ac204821e5ff098c1fa16557b89da590d69b83 100644
+index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..4e60c5ce81f6cd8f96569d8b1f329ae804e43aaf 100644
 --- a/bot.py
 +++ b/bot.py
 @@ -1,33 +1,32 @@
@@ -95,7 +95,7 @@ index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..70ac204821e5ff098c1fa16557b89da5
      return menu
  
  def get_order_menu():
-@@ -323,89 +328,79 @@ async def all_buttons_handler(msg: types.Message):
+@@ -323,89 +328,77 @@ async def all_buttons_handler(msg: types.Message):
      elif "позвонить" in text or "телефон" in text:
          await order_phone(msg)
          return
@@ -160,14 +160,17 @@ index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..70ac204821e5ff098c1fa16557b89da5
          logger.warning("WEBHOOK_URL не задан! Используется polling.")
  
  async def on_shutdown(dp):
-     logger.info("Удаляю webhook...")
-     try:
-         await bot.delete_webhook()
-     except:
-         pass
+-    logger.info("Удаляю webhook...")
+-    try:
+-        await bot.delete_webhook()
+-    except:
+-        pass
++    # Не удаляем webhook: Render может остановить бесплатный сервис при простое.
++    # Сохранённый webhook позволит следующему сообщению Telegram разбудить сервис.
++    logger.info("Бот остановлен; webhook сохранён для следующего запуска")
      await storage.close()
      await bot.session.close()
-     logger.info("Бот остановлен")
+-    logger.info("Бот остановлен")
  
  # ==================== ЗАПУСК ====================
  if __name__ == "__main__":
@@ -182,10 +185,13 @@ index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..70ac204821e5ff098c1fa16557b89da5
              webhook_path=WEBHOOK_PATH,
              on_startup=on_startup,
              on_shutdown=on_shutdown,
-             skip_updates=True,
+-            skip_updates=True,
++            # Не отбрасываем сообщение, которое могло разбудить бесплатный сервис.
++            skip_updates=False,
              host=WEBAPP_HOST,
              port=WEBAPP_PORT,
          )
      else:
          logger.info("Запуск polling...")
          start_polling(dp, skip_updates=True, on_startup=on_startup, on_shutdown=on_shutdown)
+
