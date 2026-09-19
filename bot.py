@@ -1,8 +1,3 @@
-diff --git a/bot.py b/bot.py
-index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..4e60c5ce81f6cd8f96569d8b1f329ae804e43aaf 100644
---- a/bot.py
-+++ b/bot.py
-@@ -1,33 +1,32 @@
  import logging
  import os
  import pandas as pd
@@ -108,13 +103,13 @@ index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..4e60c5ce81f6cd8f96569d8b1f329ae8
  
      # Неизвестная команда — показываем приветствие
      else:
-         logger.warning("Необработанное: '" + original_text + "'")
+         logger.warning("Необработанное: '\''" + original_text + "'\''")
          await welcome_cmd(msg)
  
  @dp.errors_handler()
  async def error_handler(update, exception):
      logger.error("Ошибка: " + str(exception), exc_info=True)
-     if update and hasattr(update, 'message') and update.message:
+     if update and hasattr(update, '\''message'\'') and update.message:
          try:
              await update.message.answer("⚠️ Произошла ошибка. Попробуйте позже.")
          except:
@@ -194,4 +189,4 @@ index 66aa658e2ae79891bd4ba45da9ee48ed581f791a..4e60c5ce81f6cd8f96569d8b1f329ae8
      else:
          logger.info("Запуск polling...")
          start_polling(dp, skip_updates=True, on_startup=on_startup, on_shutdown=on_shutdown)
-
+' | git apply --3way)
