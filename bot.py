@@ -1,10 +1,10 @@
- import logging
- import os
- import pandas as pd
- from collections import defaultdict
- from aiogram import Bot, Dispatcher, types
- from aiogram.contrib.fsm_storage.memory import MemoryStorage
- from aiogram.utils.executor import start_webhook, start_polling
+import logging
+import os
+import pandas as pd
+from collections import defaultdict
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.utils.executor import start_webhook, start_polling
 -import asyncio
  
  # ==================== НАСТРОЙКИ ====================
