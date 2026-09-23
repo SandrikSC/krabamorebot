@@ -5,7 +5,6 @@ from collections import defaultdict
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.executor import start_webhook, start_polling
--import asyncio
  
  # ==================== НАСТРОЙКИ ====================
  TOKEN = os.getenv("TELEGRAM_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН")
@@ -31,7 +30,6 @@ from aiogram.utils.executor import start_webhook, start_polling
  def load_catalog():
      try:
          # Проверяем несколько путей (для Render и локальной разработки)
-@@ -108,51 +107,57 @@ SALES_TEXT = (
      "💬 <b>Скидки и акции уточняйте у менеджера</b> в чате или по телефону\n\n"
      "📢 Следите за нашими поступлениями в <a href=\"https://t.me/krabamoreblg\">Telegram канале</a>"
  )
@@ -57,14 +55,10 @@ from aiogram.utils.executor import start_webhook, start_polling
  WEBAPP_HOST = "0.0.0.0"
  WEBAPP_PORT = int(os.getenv("PORT", 8000))
  WEBHOOK_PATH = "/webhook/bot"
--WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
-+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
-+# Render автоматически задаёт RENDER_EXTERNAL_URL. WEBHOOK_URL можно указать
-+# вручную, если бот размещён у другого провайдера.
-+WEBHOOK_URL = os.getenv(
-+    "WEBHOOK_URL",
-+    f"{RENDER_EXTERNAL_URL}{WEBHOOK_PATH}" if RENDER_EXTERNAL_URL else "",
-+)
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", f"{RENDER_EXTERNAL_URL}/webhook/bot" if RENDER_EXTERNAL_URL else "")
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", f"{RENDER_EXTERNAL_URL}{WEBHOOK_PATH}" if RENDER_EXTERNAL_URL else "")
  
  bot = Bot(token=TOKEN, parse_mode="HTML")
  storage = MemoryStorage()
@@ -90,7 +84,6 @@ from aiogram.utils.executor import start_webhook, start_polling
      return menu
  
  def get_order_menu():
-@@ -323,89 +328,77 @@ async def all_buttons_handler(msg: types.Message):
      elif "позвонить" in text or "телефон" in text:
          await order_phone(msg)
          return
@@ -103,26 +96,19 @@ from aiogram.utils.executor import start_webhook, start_polling
  
      # Неизвестная команда — показываем приветствие
      else:
-         logger.warning("Необработанное: '\''" + original_text + "'\''")
+         logger.warning("Необработанное: '%s'", original_text)
          await welcome_cmd(msg)
  
  @dp.errors_handler()
  async def error_handler(update, exception):
      logger.error("Ошибка: " + str(exception), exc_info=True)
-     if update and hasattr(update, '\''message'\'') and update.message:
+     if update and hasattr(update, 'message') and update.message:
          try:
              await update.message.answer("⚠️ Произошла ошибка. Попробуйте позже.")
          except:
              pass
      return True
  
--# ==================== KEEP-ALIVE (чтобы Render не усыплял бота) ====================
--async def keep_alive():
--    """Отправляем себе пинг каждые 5 минут, чтобы бот не засыпал на Render"""
--    while True:
--        await asyncio.sleep(300)  # 5 минут
--        logger.info("Keep-alive ping")
--
  async def on_startup(dp):
      logger.info("Бот Краба Море запущен. Webhook: " + str(WEBHOOK_URL))
      logger.info("Категорий: " + str(len(category_data)))
@@ -143,7 +129,7 @@ from aiogram.utils.executor import start_webhook, start_polling
      except Exception as e:
          logger.error("Команды не установлены: " + str(e))
 -    
--    if WEBHOOK_URL and "render" in WEBHOOK_URL:
+-    if WEBHOOK_URL:
 +
 +    if WEBHOOK_URL:
          try:
@@ -165,15 +151,14 @@ from aiogram.utils.executor import start_webhook, start_polling
 +    logger.info("Бот остановлен; webhook сохранён для следующего запуска")
      await storage.close()
      await bot.session.close()
--    logger.info("Бот остановлен")
- 
+- 
  # ==================== ЗАПУСК ====================
  if __name__ == "__main__":
      if not TOKEN or TOKEN == "ВСТАВЬ_СЮДА_ТОКЕН":
          logger.error("❌ TELEGRAM_TOKEN не задан!")
          exit(1)
  
--    if WEBHOOK_URL and "render" in WEBHOOK_URL:
++    if WEBHOOK_URL:
 +    if WEBHOOK_URL:
          start_webhook(
              dispatcher=dp,
@@ -189,4 +174,3 @@ from aiogram.utils.executor import start_webhook, start_polling
      else:
          logger.info("Запуск polling...")
          start_polling(dp, skip_updates=True, on_startup=on_startup, on_shutdown=on_shutdown)
-' | git apply --3way)
