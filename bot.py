@@ -483,6 +483,51 @@ async def process_call_phone(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     await callback_query.message.answer("📞 Телефон: +7 (963) 814-36-34")
 
+@dp.message_handler(state=ConsultantStates.waiting_details, content_types=types.ContentTypes.TEXT)
+async def consultant_message_handler(msg: types.Message, state: FSMContext):
+    """Сообщения Шкиперу обрабатываются отдельным state-handler."""
+    logger.info("ШКИПЕР: user=%s text=%r", msg.from_user.id, msg.text)
+
+    text = (msg.text or "").strip()
+    lower = text.lower()
+
+    if "назад" in lower or "меню" in lower:
+        await state.finish()
+        await back_to_menu(msg)
+        return
+
+    try:
+        # Первый запрос про компанию/гостей — уточняем формат и бюджет.
+        if any(x in lower for x in ["человек", "гост", "компан", "семь", "шест", "пят", "четыр"]):
+            await state.update_data(first_request=text)
+            await msg.answer(
+                "⚓ Отлично. А теперь уточним курс.\n\n"
+                "Это скорее:\n"
+                "🥂 закуска к столу\n"
+                "🦀 полноценный морской стол\n"
+                "🔥 что-нибудь приготовить горячее\n"
+                "🎁 хочется удивить гостей\n\n"
+                "И если удобно — напишите примерный бюджет. "
+                "Тогда Шкипер сможет посоветовать точнее.",
+                reply_markup=get_back_menu()
+            )
+            return
+
+        answer = consultant_answer(text)
+        await state.finish()
+        await msg.answer(
+            "⚓ <b>Шкипер советует:</b>\n\n" + answer,
+            reply_markup=get_back_menu()
+        )
+    except Exception:
+        logger.exception("Ошибка в сообщении Шкиперу")
+        await state.finish()
+        await msg.answer(
+            "⚓ Шкипер сейчас не хочет придумывать ответ. "
+            "Позвоните в магазин: <b>+7 (963) 814-36-34</b> — вам подскажут.",
+            reply_markup=get_back_menu()
+        )
+
 @dp.message_handler()
 async def all_buttons_handler(msg: types.Message):
     logger.info("ПОЛУЧЕНО СООБЩЕНИЕ: user=%s text=%r", msg.from_user.id, msg.text)
@@ -559,36 +604,18 @@ async def all_buttons_handler(msg: types.Message):
         await msg.answer(category_data[original_text], reply_markup=get_back_menu())
         return
 
-    # Свободный вопрос к консультанту
+    # Свободный вопрос вне режима Шкипера
     elif len(original_text.strip()) > 2:
-        state = dp.current_state(user=msg.from_user.id, chat=msg.chat.id)
-        current_state = await state.get_state()
-
-        if current_state == ConsultantStates.waiting_details.state:
-            q = original_text.lower()
-
-            if any(x in q for x in ["человек", "гост", "компан", "семь", "шест", "пят", "четыр"]):
-                await state.update_data(first_request=original_text)
-                await msg.answer(
-                    "⚓ Отлично. А теперь уточним курс.\n\n"
-                    "Это скорее:\n"
-                    "🥂 закуска к столу\n"
-                    "🦀 полноценный морской стол\n"
-                    "🔥 что-нибудь приготовить горячее\n"
-                    "🎁 хочется удивить гостей\n\n"
-                    "И если удобно — напишите примерный бюджет. "
-                    "Тогда Шкипер сможет посоветовать точнее.",
-                    reply_markup=get_back_menu()
-                )
-                return
-
+        try:
             answer = consultant_answer(original_text)
-            await state.finish()
             await msg.answer("⚓ <b>Шкипер советует:</b>\n\n" + answer, reply_markup=get_back_menu())
-            return
-
-        answer = consultant_answer(original_text)
-        await msg.answer("⚓ <b>Шкипер советует:</b>\n\n" + answer, reply_markup=get_back_menu())
+        except Exception:
+            logger.exception("Ошибка консультанта")
+            await msg.answer(
+                "⚓ Шкипер не хочет придумывать ответ. "
+                "Позвоните в магазин: <b>+7 (963) 814-36-34</b>.",
+                reply_markup=get_back_menu()
+            )
         return
 
     # Неизвестная команда — показываем приветствие
