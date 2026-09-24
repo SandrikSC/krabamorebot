@@ -22,6 +22,8 @@ WHATSAPP_NUMBER = "+79638143634"
 # === ЗАКАЗЫ ===
 MANAGER_TELEGRAM = "@krabamoreblg"
 MAX_LINK = "https://max.ru/u/f9LHodD0cOKyWMZFNxZNIEc752Qto0d0WidvEMDukqVCdvuhBUu3bo_7_n0"
+CHANNEL_USERNAME = "@krabamoreblg"
+CHANNEL_URL = "https://t.me/krabamoreblg"
 
 # ==================== ЛОГИРОВАНИЕ ====================
 logging.basicConfig(
@@ -268,7 +270,33 @@ async def welcome_cmd(msg: types.Message):
     """Приветствие для новых пользователей"""
     await msg.answer(WELCOME_TEXT, reply_markup=welcome_keyboard)
 
+async def check_channel_subscription(user_id):
+    try:
+        member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        return member.status in ("member", "administrator", "creator")
+    except Exception as e:
+        logger.error("Ошибка проверки подписки: " + str(e))
+        return False
+
+def get_subscription_keyboard():
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(types.InlineKeyboardButton("📢 Подписаться на канал", url=CHANNEL_URL))
+    keyboard.add(types.InlineKeyboardButton("✅ Я подписался", callback_data="check_subscription"))
+    return keyboard
+
+async def require_subscription(msg):
+    await msg.answer(
+        "🦀 <b>Добро пожаловать в Краба Море!</b>\n\n"
+        "Чтобы пользоваться ботом и спросить совета у Шкипера, "
+        "подпишитесь на наш Telegram-канал.\n\n"
+        "После подписки нажмите <b>«✅ Я подписался»</b>.",
+        reply_markup=get_subscription_keyboard()
+    )
+
 async def start_cmd(msg: types.Message):
+    if not await check_channel_subscription(msg.from_user.id):
+        await require_subscription(msg)
+        return
     await msg.answer(START_TEXT, reply_markup=get_main_menu())
 
 async def catalog_cmd(msg: types.Message):
@@ -385,6 +413,19 @@ async def commands_handler(msg: types.Message):
         await sales_cmd(msg)
 
 # 3. Callback от inline-кнопки "Запустить бота"
+@dp.callback_query_handler(lambda c: c.data == "check_subscription")
+async def process_check_subscription(callback_query: types.CallbackQuery):
+    if await check_channel_subscription(callback_query.from_user.id):
+        await bot.answer_callback_query(callback_query.id, "Подписка подтверждена ✅")
+        await start_cmd(callback_query.message)
+    else:
+        await bot.answer_callback_query(callback_query.id, "Подписка пока не найдена ❗")
+        await callback_query.message.answer(
+            "❗ Пока не вижу подписку на канал @krabamoreblg.\n\n"
+            "Подпишитесь и нажмите кнопку ещё раз.",
+            reply_markup=get_subscription_keyboard()
+        )
+
 @dp.callback_query_handler(lambda c: c.data == "start_bot")
 async def process_callback_start(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
@@ -411,6 +452,10 @@ async def process_call_phone(callback_query: types.CallbackQuery):
 
 @dp.message_handler()
 async def all_buttons_handler(msg: types.Message):
+    if not await check_channel_subscription(msg.from_user.id):
+        await require_subscription(msg)
+        return
+
     text = msg.text.lower()
     original_text = msg.text
 
