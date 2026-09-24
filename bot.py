@@ -627,13 +627,18 @@ async def on_startup(dp):
         logger.warning("WEBHOOK_URL не задан! Используется polling.")
 
 async def on_shutdown(dp):
-    logger.info("Удаляю webhook...")
+    # В режиме webhook НЕ удаляем webhook при остановке.
+    # При rolling-redeploy Render старый экземпляр может завершиться уже
+    # после запуска нового и удалить его webhook — из-за этого сообщения теряются.
+    logger.info("Остановка бота без удаления webhook...")
     try:
-        await bot.delete_webhook()
-    except:
+        await storage.close()
+    except Exception:
         pass
-    await storage.close()
-    await bot.session.close()
+    try:
+        await bot.session.close()
+    except Exception:
+        pass
     logger.info("Бот остановлен")
 
 # ==================== ЗАПУСК ====================
