@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.executor import start_webhook, start_polling
 import asyncio
+import json
 
 # ==================== НАСТРОЙКИ ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН")
@@ -81,6 +82,89 @@ def load_catalog():
 
 category_data = load_catalog()
 
+# ==================== БАЗА ЗНАНИЙ ====================
+def load_knowledge():
+    path = os.path.join(os.path.dirname(__file__), "knowledge.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error("Ошибка загрузки knowledge.json: " + str(e))
+        return {"sections": {}}
+
+knowledge = load_knowledge()
+
+def knowledge_text(article_key):
+    for section in knowledge.get("sections", {}).values():
+        article = section.get("articles", {}).get(article_key)
+        if article:
+            return article
+    return None
+
+def search_catalog(query, limit=8):
+    q = query.lower().strip()
+    results = []
+    for cat_title, text in category_data.items():
+        for line in text.split("\n"):
+            if ". " in line and " — <b>" in line:
+                clean = line.replace("<b>", "").replace("</b>", "")
+                if q in clean.lower():
+                    results.append(clean)
+                    if len(results) >= limit:
+                        return results
+    return results
+
+def consultant_answer(user_text):
+    q = user_text.lower().strip()
+
+    # Справочник по крабу
+    if any(x in q for x in ["камчат", "стригу", "разница краб", "какой краб"]):
+        return "🦀 <b>Камчатский краб и стригун</b>\n\n" + knowledge_text("kamchatka_vs_snow")
+    if any(x in q for x in ["размер", "s m", "s m l", "l3", "l5", "l2", "l4", "градац"]):
+        return "📏 <b>Размеры краба</b>\n\n" + knowledge_text("sizes")
+    if "кулак" in q:
+        return "🦀 <b>Что такое кулак краба?</b>\n\n" + knowledge_text("fist")
+    if "фалан" in q:
+        return "🦀 <b>Что такое фаланга?</b>\n\n" + knowledge_text("phalanx")
+    if "роз" in q and "краб" in q:
+        return "🌹 <b>Что такое роза?</b>\n\n" + knowledge_text("rose")
+    if "колен" in q and "краб" in q:
+        return "🦀 <b>Что такое колено?</b>\n\n" + knowledge_text("knee")
+    if "салат" in q and ("мяс" in q or "краб" in q):
+        return "🥗 <b>Что такое салатное мясо?</b>\n\n" + knowledge_text("salad_meat")
+
+    # Икра
+    if any(x in q for x in ["икра", "кета", "горбуш", "нерк"]):
+        if any(x in q for x in ["разниц", "отлич", "какую", "какая", "выбрат"]):
+            return "🥚 <b>Какая икра чем отличается?</b>\n\n" + knowledge_text("types") + "\n\n" + knowledge_text("how_to_choose")
+        return "🥚 <b>Про икру</b>\n\n" + knowledge_text("types")
+
+    # Приготовление
+    if "кальмар" in q and any(x in q for x in ["готов", "приготов", "вар", "жар"]):
+        return "🦑 <b>Как готовить кальмара?</b>\n\n" + knowledge_text("squid")
+    if "гребеш" in q and any(x in q for x in ["готов", "приготов", "жар"]):
+        return "🐚 <b>Как готовить гребешок?</b>\n\n" + knowledge_text("scallop")
+    if "краб" in q and any(x in q for x in ["готов", "приготов", "вар", "размор"]):
+        return "🦀 <b>Как обращаться с крабом?</b>\n\n" + knowledge_text("crab")
+    if "размороз" in q:
+        return "❄️ <b>Как размораживать?</b>\n\n" + knowledge_text("thawing")
+
+    # Поиск конкретного товара
+    results = search_catalog(q)
+    if results:
+        return "🔎 <b>Нашёл в каталоге:</b>\n\n" + "\n".join(results) + "\n\nЕсли хотите, могу помочь выбрать из этих вариантов."
+
+    return (
+        "🦀 Я могу помочь выбрать морепродукты и объяснить, что это за продукт.\n\n"
+        "Например, спросите:\n"
+        "• «Чем камчатский краб отличается от стригуна?»\n"
+        "• «Что такое фаланга, кулак и колено?»\n"
+        "• «Чем L3 отличается от L5?»\n"
+        "• «Какая икра крупнее — кета или горбуша?»\n"
+        "• «Что взять на салат?»\n"
+        "• «Как приготовить кальмара?»"
+    )
+
 # ==================== ТЕКСТЫ ====================
 WELCOME_TEXT = (
     "👋 <b>Добро пожаловать в магазин Краба Море!</b>\n\n"
@@ -145,7 +229,8 @@ welcome_keyboard.add(types.InlineKeyboardButton("🚀 Запустить бот�
 def get_main_menu():
     """Создаём меню заново при каждом вызове — надёжнее"""
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    menu.add("📋 Каталог", "📞 Контакты")
+    menu.add("📋 Каталог", "💬 Спросить Краба")
+    menu.add("📚 Разбираемся", "📞 Контакты")
     menu.add("🛒 Оформить заказ", "🎁 Акции")
     return menu
 
@@ -181,6 +266,25 @@ async def catalog_cmd(msg: types.Message):
         await msg.answer("⚠️ Каталог временно недоступен. Попробуйте позже.")
         return
     await msg.answer("📋 <b>Выберите категорию:</b>", reply_markup=get_catalog_menu())
+
+async def consultant_cmd(msg: types.Message):
+    await msg.answer(
+        "💬 <b>Спросить Краба</b>\n\n"
+        "Задайте вопрос своими словами — я попробую подсказать по ассортименту, "
+        "крабу, икре, рыбе и приготовлению.\n\n"
+        "Например: <i>«Что взять на праздничный стол?»</i>",
+        reply_markup=get_back_menu()
+    )
+
+async def knowledge_cmd(msg: types.Message):
+    keyboard = types.InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        types.InlineKeyboardButton("🦀 Краб", callback_data="know_crab"),
+        types.InlineKeyboardButton("🥚 Икра", callback_data="know_roe"),
+        types.InlineKeyboardButton("🍳 Готовим", callback_data="know_cooking"),
+        types.InlineKeyboardButton("🎯 Как выбрать", callback_data="know_selection")
+    )
+    await msg.answer("📚 <b>Разбираемся в морепродуктах</b>\n\nВыберите тему:", reply_markup=keyboard)
 
 async def contacts_cmd(msg: types.Message):
     await msg.answer(CONTACTS_TEXT, reply_markup=get_back_menu())
@@ -272,6 +376,19 @@ async def process_callback_start(callback_query: types.CallbackQuery):
     await start_cmd(callback_query.message)
 
 # 4. УНИВЕРСАЛЬНЫЙ ХЕНДЛЕР ДЛЯ ВСЕХ КНОПОК
+@dp.callback_query_handler(lambda c: c.data.startswith("know_"))
+async def process_knowledge(callback_query: types.CallbackQuery):
+    await bot.answer_callback_query(callback_query.id)
+    key = callback_query.data.replace("know_", "")
+    section = knowledge.get("sections", {}).get(key)
+    if not section:
+        await callback_query.message.answer("Раздел пока готовится.")
+        return
+    parts = [section.get("title", "📚 Раздел")]
+    for title, article in section.get("articles", {}).items():
+        parts.append("\n<b>" + title.replace("_", " ").title() + "</b>\n" + article)
+    await callback_query.message.answer("\n".join(parts), reply_markup=get_back_menu())
+
 @dp.callback_query_handler(lambda c: c.data == "call_phone")
 async def process_call_phone(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
@@ -288,6 +405,16 @@ async def all_buttons_handler(msg: types.Message):
     if "назад" in text or "меню" in text or text == "🔙 назад в меню":
         logger.info("ОБНАРУЖЕНО 'назад' или 'меню'")
         await back_to_menu(msg)
+        return
+
+    # Спросить Краба
+    elif "спросить краба" in text:
+        await consultant_cmd(msg)
+        return
+
+    # Разбираемся
+    elif "разбираемся" in text:
+        await knowledge_cmd(msg)
         return
 
     # Каталог
@@ -328,6 +455,12 @@ async def all_buttons_handler(msg: types.Message):
     # Позвонить
     elif "позвонить" in text or "телефон" in text:
         await order_phone(msg)
+        return
+
+    # Свободный вопрос к консультанту
+    elif len(original_text.strip()) > 2:
+        answer = consultant_answer(original_text)
+        await msg.answer(answer, reply_markup=get_back_menu())
         return
 
     # Категории товаров
@@ -402,7 +535,7 @@ if __name__ == "__main__":
         logger.error("❌ TELEGRAM_TOKEN не задан!")
         exit(1)
 
-    if WEBHOOK_URL and "render" in WEBHOOK_URL:
+    if WEBHOOK_URL:
         start_webhook(
             dispatcher=dp,
             webhook_path=WEBHOOK_PATH,
