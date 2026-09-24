@@ -4,6 +4,8 @@ import pandas as pd
 from collections import defaultdict
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_webhook, start_polling
 import asyncio
 import json
@@ -94,6 +96,9 @@ def load_knowledge():
 
 knowledge = load_knowledge()
 
+class ConsultantStates(StatesGroup):
+    waiting_details = State()
+
 def knowledge_text(article_key):
     for section in knowledge.get("sections", {}).values():
         article = section.get("articles", {}).get(article_key)
@@ -174,6 +179,7 @@ WELCOME_TEXT = (
     "👋 <b>Добро пожаловать в магазин Краба Море!</b>\n\n"
     "🦀 Свежие морепродукты и деликатесы\n"
     "🚚 Доставка по городу\n"
+    "⚓ Шкипер посоветует, что выбрать\n"
     "💰 За лучшим — к нам. Остальное и так найдётся\n\n"
     "<b>Для начала работы нажмите кнопку ниже 👇</b>"
 )
@@ -233,7 +239,7 @@ welcome_keyboard.add(types.InlineKeyboardButton("🚀 Запустить бот�
 def get_main_menu():
     """Создаём меню заново при каждом вызове — надёжнее"""
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    menu.add("📋 Каталог", "💬 Спросить Краба")
+    menu.add("📋 Каталог", "⚓ Спросить Шкипера")
     menu.add("📚 Разбираемся", "📞 Контакты")
     menu.add("🛒 Оформить заказ", "🎁 Акции")
     return menu
@@ -271,12 +277,17 @@ async def catalog_cmd(msg: types.Message):
         return
     await msg.answer("📋 <b>Выберите категорию:</b>", reply_markup=get_catalog_menu())
 
-async def consultant_cmd(msg: types.Message):
+async def consultant_cmd(msg: types.Message, state: FSMContext):
+    await state.set_state(ConsultantStates.waiting_details.state)
     await msg.answer(
-        "💬 <b>Спросить Краба</b>\n\n"
-        "Задайте вопрос своими словами — я попробую подсказать по ассортименту, "
-        "крабу, икре, рыбе и приготовлению.\n\n"
-        "Например: <i>«Что взять на праздничный стол?»</i>",
+        "⚓ <b>Шкипер на связи.</b>\n\n"
+        "Рассказывайте, что задумали — вопрос можно задавать как угодно, своими словами.\n\n"
+        "Например:\n"
+        "• «Нужно что-нибудь на компанию из 6 человек»\n"
+        "• «Хочу удивить гостей, что посоветуете?»\n"
+        "• «Какого краба взять?»\n"
+        "• «Что лучше на салат?»\n\n"
+        "<i>Шкипер посоветует.</i> ⚓",
         reply_markup=get_back_menu()
     )
 
@@ -412,8 +423,9 @@ async def all_buttons_handler(msg: types.Message):
         return
 
     # Спросить Краба
-    elif "спросить краба" in text:
-        await consultant_cmd(msg)
+    elif "спросить шкипера" in text or "спросить краба" in text:
+        state = dp.current_state(user=msg.from_user.id, chat=msg.chat.id)
+        await consultant_cmd(msg, state)
         return
 
     # Разбираемся
@@ -469,8 +481,34 @@ async def all_buttons_handler(msg: types.Message):
 
     # Свободный вопрос к консультанту
     elif len(original_text.strip()) > 2:
+        state = dp.current_state(user=msg.from_user.id, chat=msg.chat.id)
+        current_state = await state.get_state()
+
+        if current_state == ConsultantStates.waiting_details.state:
+            q = original_text.lower()
+
+            if any(x in q for x in ["человек", "гост", "компан", "семь", "шест", "пят", "четыр"]):
+                await state.update_data(first_request=original_text)
+                await msg.answer(
+                    "⚓ Отлично. А теперь уточним курс.\n\n"
+                    "Это скорее:\n"
+                    "🥂 закуска к столу\n"
+                    "🦀 полноценный морской стол\n"
+                    "🔥 что-нибудь приготовить горячее\n"
+                    "🎁 хочется удивить гостей\n\n"
+                    "И если удобно — напишите примерный бюджет. "
+                    "Тогда Шкипер сможет посоветовать точнее.",
+                    reply_markup=get_back_menu()
+                )
+                return
+
+            answer = consultant_answer(original_text)
+            await state.finish()
+            await msg.answer("⚓ <b>Шкипер советует:</b>\n\n" + answer, reply_markup=get_back_menu())
+            return
+
         answer = consultant_answer(original_text)
-        await msg.answer(answer, reply_markup=get_back_menu())
+        await msg.answer("⚓ <b>Шкипер советует:</b>\n\n" + answer, reply_markup=get_back_menu())
         return
 
     # Неизвестная команда — показываем приветствие
