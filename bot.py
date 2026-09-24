@@ -148,6 +148,10 @@ def consultant_answer(user_text):
         return "🦀 <b>Как обращаться с крабом?</b>\n\n" + knowledge_text("crab")
     if "размороз" in q:
         return "❄️ <b>Как размораживать?</b>\n\n" + knowledge_text("thawing")
+    if any(x in q for x in ["на салат", "для салата", "салат"]):
+        return "🥗 <b>Что взять для салата?</b>\n\n" + knowledge_text("salad_meat")
+    if any(x in q for x in ["празднич", "на стол", "гост", "компан"]):
+        return "🎉 <b>Для праздничного стола</b>\n\n" + knowledge_text("party")
 
     # Поиск конкретного товара
     results = search_catalog(q)
@@ -457,16 +461,16 @@ async def all_buttons_handler(msg: types.Message):
         await order_phone(msg)
         return
 
-    # Свободный вопрос к консультанту
-    elif len(original_text.strip()) > 2:
-        answer = consultant_answer(original_text)
-        await msg.answer(answer, reply_markup=get_back_menu())
-        return
-
     # Категории товаров
     elif original_text in category_data:
         logger.info("Пользователь выбрал категорию: " + original_text)
         await msg.answer(category_data[original_text], reply_markup=get_back_menu())
+        return
+
+    # Свободный вопрос к консультанту
+    elif len(original_text.strip()) > 2:
+        answer = consultant_answer(original_text)
+        await msg.answer(answer, reply_markup=get_back_menu())
         return
 
     # Неизвестная команда — показываем приветствие
