@@ -24,6 +24,7 @@ MANAGER_TELEGRAM = "@krabamoreblg"
 MAX_LINK = "https://max.ru/u/f9LHodD0cOKyWMZFNxZNIEc752Qto0d0WidvEMDukqVCdvuhBUu3bo_7_n0"
 CHANNEL_USERNAME = "@krabamoreblg"
 CHANNEL_URL = "https://t.me/krabamoreblg"
+SUBSCRIPTION_CACHE = {}
 
 # ==================== ЛОГИРОВАНИЕ ====================
 logging.basicConfig(
@@ -291,12 +292,24 @@ async def welcome_cmd(msg: types.Message):
     await msg.answer(WELCOME_TEXT, reply_markup=welcome_keyboard)
 
 async def check_channel_subscription(user_id):
+    # Не дёргаем Telegram API на каждое сообщение: после успешной проверки
+    # сохраняем статус на 30 минут.
+    import time
+    cached = SUBSCRIPTION_CACHE.get(user_id)
+    if cached and time.time() - cached < 1800:
+        return True
+
     try:
         member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        return member.status in ("member", "administrator", "creator")
+        subscribed = member.status in ("member", "administrator", "creator")
+        if subscribed:
+            SUBSCRIPTION_CACHE[user_id] = time.time()
+        return subscribed
     except Exception as e:
-        logger.error("Ошибка проверки подписки: " + str(e))
-        return False
+        logger.error("Ошибка проверки подписки user=%s: %s", user_id, e)
+        # Не зависаем на проверке. Если Telegram временно не отвечает,
+        # пропускаем уже работающего пользователя, чтобы бот не молчал.
+        return user_id in SUBSCRIPTION_CACHE
 
 def get_subscription_keyboard():
     keyboard = types.InlineKeyboardMarkup(row_width=1)
@@ -472,6 +485,8 @@ async def process_call_phone(callback_query: types.CallbackQuery):
 
 @dp.message_handler()
 async def all_buttons_handler(msg: types.Message):
+    logger.info("ПОЛУЧЕНО СООБЩЕНИЕ: user=%s text=%r", msg.from_user.id, msg.text)
+
     if not await check_channel_subscription(msg.from_user.id):
         await require_subscription(msg)
         return
