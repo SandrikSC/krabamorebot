@@ -9,6 +9,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_webhook, start_polling
 import asyncio
 import json
+from content_handlers import register_content_handlers, is_owner
 
 # ==================== НАСТРОЙКИ ====================
 TOKEN = os.getenv("TELEGRAM_TOKEN", "ВСТАВЬ_СЮДА_ТОКЕН")
@@ -362,12 +363,14 @@ dp = Dispatcher(bot, storage=storage)
 welcome_keyboard = types.InlineKeyboardMarkup()
 welcome_keyboard.add(types.InlineKeyboardButton("🚀 Запустить бота", callback_data="start_bot"))
 
-def get_main_menu():
+def get_main_menu(user_id=None):
     """Создаём меню заново при каждом вызове — надёжнее"""
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     menu.add("📋 Каталог", "⚓ Спросить Шкипера")
     menu.add("📚 Разбираемся", "📞 Контакты")
     menu.add("🛒 Оформить заказ", "🎁 Акции")
+    if user_id is not None and is_owner(user_id):
+        menu.add("⚓ Контент-центр")
     return menu
 
 def get_catalog_menu():
@@ -388,6 +391,18 @@ def get_back_menu():
     menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
     menu.add("🔙 Назад в меню")
     return menu
+
+# ==================== РЕГИСТРАЦИЯ AI КОНТЕНТ-ЦЕНТРА ====================
+def catalog_text_for_ai():
+    return "\n".join(category_data.values())
+
+register_content_handlers(
+    dp,
+    bot,
+    get_main_menu,
+    catalog_text_for_ai,
+    logger
+)
 
 # ==================== КОМАНДЫ ====================
 async def welcome_cmd(msg: types.Message):
@@ -433,7 +448,7 @@ async def start_cmd(msg: types.Message):
     if not await check_channel_subscription(msg.from_user.id):
         await require_subscription(msg)
         return
-    await msg.answer(START_TEXT, reply_markup=get_main_menu())
+    await msg.answer(START_TEXT, reply_markup=get_main_menu(msg.from_user.id))
 
 async def catalog_cmd(msg: types.Message):
     if not category_data:
@@ -528,7 +543,7 @@ async def sales_cmd(msg: types.Message):
     await msg.answer(SALES_TEXT, reply_markup=get_back_menu())
 
 async def back_to_menu(msg: types.Message):
-    await msg.answer("⬅️ Главное меню", reply_markup=get_main_menu())
+    await msg.answer("⬅️ Главное меню", reply_markup=get_main_menu(msg.from_user.id))
 
 # ==================== ХЕНДЛЕРЫ ====================
 # 1. Команда /start
@@ -757,6 +772,7 @@ async def on_startup(dp):
             types.BotCommand("contacts", "📞 Контакты"),
             types.BotCommand("order", "🛒 Оформить заказ"),
             types.BotCommand("sales", "🎁 Акции"),
+            types.BotCommand("content", "⚓ Контент-центр"),
         ])
         logger.info("Команды установлены")
     except Exception as e:
