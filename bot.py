@@ -9,6 +9,18 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_webhook, start_polling
 import asyncio
 import json
+import re
+from functools import lru_cache
+
+# Морфологический анализатор русского языка: понимает «семга», «семги», «семгой» и т.п.
+try:
+    import pymorphy3
+    morph = pymorphy3.MorphAnalyzer(lang="ru")
+    MORPH_AVAILABLE = True
+except Exception:
+    morph = None
+    MORPH_AVAILABLE = False
+
 from content_handlers import register_content_handlers, is_owner
 
 # ==================== НАСТРОЙКИ ====================
@@ -110,36 +122,64 @@ def knowledge_text(article_key):
             return article
     return None
 
-def search_catalog(query, limit=8):
-    q = query.lower().strip()
-    results = []
-    for cat_title, text in category_data.items():
-        for line in text.split("\n"):
+def _fallback_word_form(word):
+    """Лёгкий fallback, если морфологический словарь недоступен."""
+    word=word.lower().replace("ё","е")
+    for suffix in ("иями","ями","ами","ого","ему","ому","ее","ие","ые","ой","ый","ий","ая","яя","ое","ую","юю","ою","ею","ью","ов","ев","ей","ам","ям","ом","ем","ах","ях","ы","и","а","я","у","ю","о","е","ь"):
+        if len(word)>len(suffix)+3 and word.endswith(suffix): return word[:-len(suffix)]
+    return word
+
+@lru_cache(maxsize=4096)
+def normalize_word(word):
+    word=word.lower().strip().replace("ё","е")
+    if not word:return ""
+    if MORPH_AVAILABLE:
+        try:return morph.parse(word)[0].normal_form.replace("ё","е")
+        except Exception:pass
+    return _fallback_word_form(word)
+
+SEARCH_STOPWORDS={"а","и","в","во","на","по","из","к","ко","с","со","у","для","про","что","как","какой","какая","какие","можно","есть","хочу","нужен","нужна","мне","могу","уже","это","тот","эта","этот","еще","ещё","нас"}
+
+def search_tokens(text):
+    words=re.findall(r"[а-яА-ЯёЁa-zA-Z0-9]+",str(text).lower())
+    return [normalize_word(w) for w in words if w not in SEARCH_STOPWORDS and len(w)>1]
+
+@lru_cache(maxsize=4096)
+def normalized_text(text): return tuple(search_tokens(text))
+
+def text_matches_query(text,query):
+    """Морфологическое совпадение: «семга» найдёт «семги», «семгой», «семгу»."""
+    qt=normalized_text(query)
+    if not qt:return False
+    tt=normalized_text(text)
+    return all(t in tt for t in qt)
+
+def text_matches_any(text,terms): return any(text_matches_query(text,t) for t in terms)
+
+def search_catalog(query,limit=8):
+    """Ищет по каталогу с учётом словоформ, а не только точного окончания."""
+    results=[]
+    for cat_title,text in category_data.items():
+        for line in text.split("\\n"):
             if ". " in line and " — <b>" in line:
-                clean = line.replace("<b>", "").replace("</b>", "")
-                if q in clean.lower():
+                clean=line.replace("<b>","").replace("</b>","")
+                if text_matches_query(clean,query):
                     results.append(clean)
-                    if len(results) >= limit:
-                        return results
+                    if len(results)>=limit:return results
     return results
 
-def catalog_recommendations(terms, limit=4):
-    """Ищет реальные позиции в загруженном каталоге по ключевым словам."""
-    found = []
-    seen = set()
-    for cat_title, block in category_data.items():
-        for line in block.split("\n"):
-            if ". " not in line or " — <b>" not in line:
-                continue
-            clean = line.replace("<b>", "").replace("</b>", "")
-            low = clean.lower()
-            if any(term in low for term in terms):
-                key = clean.lower()
+def catalog_recommendations(terms,limit=4):
+    """Ищет реальные позиции в каталоге по словам и их словоформам."""
+    found=[];seen=set()
+    for cat_title,block in category_data.items():
+        for line in block.split("\\n"):
+            if ". " not in line or " — <b>" not in line:continue
+            clean=line.replace("<b>","").replace("</b>","")
+            if text_matches_any(clean,terms):
+                key=clean.lower()
                 if key not in seen:
-                    found.append(clean)
-                    seen.add(key)
-                    if len(found) >= limit:
-                        return found
+                    found.append(clean);seen.add(key)
+                    if len(found)>=limit:return found
     return found
 
 def attractive_catalog_presentation(items, intro):
@@ -272,20 +312,25 @@ def consultant_answer(user_text):
 
     # --- Остальные продукты: отвечаем только общими, безопасными фактами ---
     product_facts = [
-        (["лосос", "семг"], "🐟 Лосось — универсальный вариант для горячих блюд и запекания. Если хотите, Шкипер найдёт подходящие позиции в каталоге."),
-        (["форел"], "🐟 Форель хорошо подходит для запекания, стейков и порционной подачи. Если скажете, на сколько человек готовите, Шкипер посоветует конкретную позицию."),
-        (["палтус"], "🐟 Палтус — нежная жирная рыба, хорошо подходит для запекания и жарки. Могу помочь подобрать вариант из каталога."),
-        (["камбал"], "🐟 Камбала хорошо подходит для жарки и запекания. Если хотите, Шкипер подберёт конкретную позицию из каталога."),
-        (["мидии"], "🐚 Мидии удобны для горячих закусок и блюд. Если скажете, как хотите их приготовить, подскажу подходящий вариант."),
-        (["кревет"], "🦐 Креветка универсальна: её можно подать как закуску или использовать в салатах и горячих блюдах. Могу подобрать конкретные позиции из каталога."),
-        (["гребеш"], "🐚 Гребешок лучше готовить быстро, чтобы не пересушить. Для обжарки подходит сильный огонь и короткая тепловая обработка."),
-        (["кальмар"], "🦑 Кальмар не любит среднюю по длительности готовку: лучше быстро приготовить или готовить достаточно долго. Для нежной текстуры чаще выбирают короткую обработку."),
-        (["осьминог"], "🐙 По осьминогу Шкипер не хочет придумывать лишнего: если скажете, какой именно продукт у вас в виду, я посмотрю ассортимент."),
-        (["дорадо", "дора"], "🐟 Такой позиции я не вижу в справочнике Шкипера. Лучше проверить актуальный каталог или спросить менеджера."),
+        (["лосось", "семга"], "🐟 Лосось — универсальный вариант для горячих блюд и запекания."),
+        (["форель"], "🐟 Форель хорошо подходит для запекания, стейков и порционной подачи."),
+        (["палтус"], "🐟 Палтус — нежная жирная рыба, хорошо подходит для запекания и жарки."),
+        (["камбала"], "🐟 Камбала хорошо подходит для жарки и запекания."),
+        (["мидия"], "🐚 Мидии удобны для горячих закусок и блюд."),
+        (["креветка"], "🦐 Креветка универсальна: её можно подать как закуску или использовать в салатах и горячих блюдах."),
+        (["гребешок"], "🐚 Гребешок лучше готовить быстро, чтобы не пересушить."),
+        (["кальмар"], "🦑 Кальмар не любит среднюю по длительности готовку: лучше быстро приготовить или готовить достаточно долго."),
+        (["осьминог"], "🐙 По осьминогу Шкипер не хочет придумывать лишнего: лучше ориентироваться на конкретный продукт и способ приготовления."),
+        (["дорадо", "дора"], "🐟 Такой позиции Шкипер не видит в актуальном справочнике. Лучше проверить каталог или спросить менеджера."),
         (["суши", "ролл"], "🍣 Если речь о роллах, скажите, хотите готовые роллы или ингредиенты — Шкипер уточнит ассортимент.")
     ]
-    for words, answer in product_facts:
-        if any(x in q for x in words):
+    for terms, fact in product_facts:
+        if text_matches_any(q, terms):
+            items=catalog_recommendations(terms,6)
+            answer=fact
+            if items:
+                answer += "\\n\\n⚓ <b>Нашёл в актуальном каталоге:</b>\\n" + "\\n".join("• "+x for x in items)
+            answer += "\\n\\nЕсли скажете, что хотите приготовить или на сколько человек, Шкипер подберёт точнее."
             return answer
 
     # --- Поиск конкретного товара в актуальном каталоге ---
