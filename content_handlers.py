@@ -164,7 +164,7 @@ def register_content_handlers(dp, bot, get_main_menu, catalog_text_provider, log
             if not prompt:
                 await call.message.answer("⚠️ Исходная задача не найдена.")
                 return
-            await state.finish()
+            # Не завершаем FSM до генерации: create() сохраняет предпросмотр в state.
             await create(call.message, prompt, mode == "image", state)
             return
 
